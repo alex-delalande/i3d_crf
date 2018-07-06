@@ -120,7 +120,6 @@ class Unit3D(nn.Module):
         return x
 
 
-
 class InceptionModule(nn.Module):
     def __init__(self, in_channels, out_channels, name):
         super(InceptionModule, self).__init__()
@@ -147,6 +146,89 @@ class InceptionModule(nn.Module):
         b2 = self.b2b(self.b2a(x))
         b3 = self.b3b(self.b3a(x))
         return torch.cat([b0,b1,b2,b3], dim=1)
+
+
+class CRF(nn.Module):
+
+    def __init__(self,
+                 num_updates=1,
+                 num_classes=65,
+                 name='crf'):
+        super(CRF, self).__init__()
+        # 1 input vector of predictions, 1 output vector of predictions
+        self.num_updates = num_updates
+        self.num_classes = num_classes
+        self.name = name
+
+        
+        self.mask = Variable(torch.diag(torch.ones(num_classes)), requires_grad=False)
+        self.psi_0 = nn.Parameter((1/np.sqrt(num_classes))*torch.randn(num_classes,num_classes))
+        self.psi_1 = nn.Parameter((1/np.sqrt(num_classes))*torch.randn(num_classes,num_classes))
+
+
+
+
+    def forward(self, x):
+        # Unary terms
+        phi = x
+
+        # Marginal probabilities
+        q = F.sigmoid(x).detach()
+
+        # Update
+        for i in range(self.num_updates):
+            q = q.permute(0,2,1)
+            self.mask = self.mask.cuda()
+
+            zeros_contrib = torch.matmul(1-q, torch.t((1. - self.mask)*self.psi_0))
+            ones_contrib = torch.matmul(q, torch.t((1. - self.mask)*self.psi_1))
+            
+            zeros_contrib = zeros_contrib.permute(0,2,1)
+            ones_contrib = ones_contrib.permute(0,2,1)
+            q = phi + zeros_contrib + ones_contrib
+            if i < (self.num_updates - 1):
+                q = F.sigmoid(q)
+
+        return q
+
+
+class CRF_pairwise_cond(nn.Module):
+
+    def __init__(self,
+                 num_updates=1,
+                 num_classes=65,
+                 name='crf'):
+        super(CRF_pairwise_cond, self).__init__()
+        # 1 input vector of predictions, 1 output vector of predictions
+        self.num_updates = num_updates
+        self.num_classes = num_classes
+        self.name = name
+
+        self.mask = Variable(torch.diag(torch.ones(num_classes)), requires_grad=False)
+
+
+    def forward(self, x, psi_0, psi_1):
+        # Unary terms
+        phi = x
+
+        # Marginal probabilities
+        q = F.sigmoid(x).detach()
+
+        # Update
+        for i in range(self.num_updates):
+            q = q.permute(0,2,1)
+            self.mask = self.mask.cuda()
+
+            zeros_contrib = torch.einsum('btj,btij->bti', (q, (1. - self.mask)*psi_0))
+            ones_contrib = torch.einsum('btj,btij->bti', (q, (1. - self.mask)*psi_1))
+
+            zeros_contrib = zeros_contrib.permute(0,2,1)
+            ones_contrib = ones_contrib.permute(0,2,1)
+            q = phi + zeros_contrib + ones_contrib
+            if i < (self.num_updates - 1):
+                q = F.sigmoid(q)
+
+        return q
 
 
 class InceptionI3d(nn.Module):
@@ -183,34 +265,32 @@ class InceptionI3d(nn.Module):
         'Mixed_5b',
         'Mixed_5c',
         'Logits',
+        'CRF',
         'Predictions',
     )
 
     def __init__(self, num_classes=400, spatial_squeeze=True,
-                 final_endpoint='Logits', name='inception_i3d', in_channels=3, dropout_keep_prob=0.5):
+                 name='inception_i3d', in_channels=3, dropout_keep_prob=0.5,
+                 use_crf=False, num_updates_crf=1, pairwise_cond_crf=False):
         """Initializes I3D model instance.
         Args:
           num_classes: The number of outputs in the logit layer (default 400, which
               matches the Kinetics dataset).
           spatial_squeeze: Whether to squeeze the spatial dimensions for the logits
               before returning (default True).
-          final_endpoint: The model contains many possible endpoints.
-              `final_endpoint` specifies the last endpoint for the model to be built
-              up to. In addition to the output at `final_endpoint`, all the outputs
-              at endpoints up to `final_endpoint` will also be returned, in a
-              dictionary. `final_endpoint` must be one of
-              InceptionI3d.VALID_ENDPOINTS (default 'Logits').
           name: A string (optional). The name of this module.
-        Raises:
-          ValueError: if `final_endpoint` is not recognized.
         """
-
-        if final_endpoint not in self.VALID_ENDPOINTS:
-            raise ValueError('Unknown final endpoint %s' % final_endpoint)
+        if not use_crf:
+            final_endpoint = 'Logits'
+        else:
+            final_endpoint = 'CRF'
 
         super(InceptionI3d, self).__init__()
         self._num_classes = num_classes
         self._spatial_squeeze = spatial_squeeze
+        self.use_crf = use_crf
+        self.num_updates_crf = num_updates_crf
+        self.pairwise_cond_crf = pairwise_cond_crf
         self._final_endpoint = final_endpoint
         self.logits = None
 
@@ -300,6 +380,31 @@ class InceptionI3d(nn.Module):
                              use_batch_norm=False,
                              use_bias=True,
                              name='logits')
+        
+        if self.use_crf:
+            if not self.pairwise_cond_crf:
+                end_point = 'CRF'
+                self.crf = CRF(num_updates=self.num_updates_crf, num_classes=self._num_classes, name='crf')
+            else:
+                self.psi_0 = Unit3D(in_channels=384+384+128+128, output_channels=self._num_classes**2,
+                             kernel_shape=[1, 1, 1],
+                             padding=0,
+                             activation_fn=None,
+                             use_batch_norm=False,
+                             use_bias=True,
+                             name='psi_0')
+
+                self.psi_1 = Unit3D(in_channels=384+384+128+128, output_channels=self._num_classes**2,
+                                    kernel_shape=[1, 1, 1],
+                                    padding=0,
+                                    activation_fn=None,
+                                    use_batch_norm=False,
+                                    use_bias=True,
+                                    name='psi_1')
+                
+                end_point = 'CRF'
+                self.crf = CRF_pairwise_cond(num_updates=self.num_updates_crf, num_classes=self._num_classes, name='crf')
+
 
         self.build()
 
@@ -313,8 +418,29 @@ class InceptionI3d(nn.Module):
                              use_batch_norm=False,
                              use_bias=True,
                              name='logits')
-        
-    
+
+        if self.use_crf:
+            if not self.pairwise_cond_crf:
+                self.crf = CRF(num_updates=self.num_updates_crf, num_classes=self._num_classes)
+            else:
+                self.psi_0 = Unit3D(in_channels=384+384+128+128, output_channels=self._num_classes**2,
+                             kernel_shape=[1, 1, 1],
+                             padding=0,
+                             activation_fn=None,
+                             use_batch_norm=False,
+                             use_bias=True,
+                             name='psi_0')
+                self.psi_1 = Unit3D(in_channels=384+384+128+128, output_channels=self._num_classes**2,
+                                    kernel_shape=[1, 1, 1],
+                                    padding=0,
+                                    activation_fn=None,
+                                    use_batch_norm=False,
+                                    use_bias=True,
+                                    name='psi_1')
+
+                self.crf = CRF_pairwise_cond(num_updates=self.num_updates_crf, num_classes=self._num_classes)
+
+
     def build(self):
         for k in self.end_points.keys():
             self.add_module(k, self.end_points[k])
@@ -324,11 +450,29 @@ class InceptionI3d(nn.Module):
             if end_point in self.end_points:
                 x = self._modules[end_point](x) # use _modules to work with dataparallel
 
-        x = self.logits(self.dropout(self.avg_pool(x)))
+        logits = self.logits(self.dropout(self.avg_pool(x)))
         if self._spatial_squeeze:
-            logits = x.squeeze(3).squeeze(3)
+            logits = logits.squeeze(3).squeeze(3)
         # logits is batch X time X classes, which is what we want to work with
-        return logits
+
+        if not self.use_crf: # no CRF
+            return logits
+
+        else:
+            if not self.pairwise_cond_crf: # simple unary CRF
+                crf = self.crf(logits)
+                return logits, crf
+
+            else: # both unary & pairwise CRF
+                psi_0 = self.psi_0(self.dropout(self.avg_pool(x)))
+                psi_1 = self.psi_1(self.dropout(self.avg_pool(x)))
+                if self._spatial_squeeze:
+                    psi_0 = psi_0.squeeze(3).squeeze(3)
+                    psi_1 = psi_1.squeeze(3).squeeze(3)
+                psi_0 = psi_0.reshape(list(logits.permute(0,2,1).size()) + [self._num_classes])
+                psi_1 = psi_1.reshape(list(logits.permute(0,2,1).size()) + [self._num_classes])
+                crf = self.crf(logits, psi_0, psi_1)
+                return logits, crf
         
 
     def extract_features(self, x):

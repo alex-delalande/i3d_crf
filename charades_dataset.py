@@ -58,47 +58,52 @@ def load_flow_frames(image_dir, vid, start, num):
   return np.asarray(frames, dtype=np.float32)
 
 
-def make_dataset(split_file, split, root, mode, num_classes=157):
+def make_dataset(split_file, split, root, mode, snippets, num_classes=157):
+    count_items = 0
     dataset = []
     with open(split_file, 'r') as f:
         data = json.load(f)
 
-    i = 0
     for vid in data.keys():
         if data[vid]['subset'] != split:
             continue
 
         if not os.path.exists(os.path.join(root, vid)):
             continue
-        num_frames = len(os.listdir(os.path.join(root, vid)))
-        if mode == 'flow':
-            num_frames = num_frames//2
-            
-        if num_frames < 66:
-            continue
 
-        label = np.zeros((num_classes,num_frames), np.float32)
+        num_frames = len(os.listdir(os.path.join(root, vid)))
+        if mode == "flow":
+            num_frames = num_frames//2
 
         fps = num_frames/data[vid]['duration']
-        for ann in data[vid]['actions']:
-            for fr in range(0,num_frames,1):
-                if fr/fps > ann[1] and fr/fps < ann[2]:
-                    label[ann[0], fr] = 1 # binary classification
-        dataset.append((vid, label, data[vid]['duration'], num_frames))
-        i += 1
+        
+        for j in range(0, num_frames, snippets):
+            if j+snippets>num_frames:
+                continue
+            label = np.zeros((num_classes, snippets), np.float32)
+            for ann in data[vid]['actions']:
+                for fr in range(j+1,j+snippets+1,1):
+                    if fr/fps >= ann[1] and fr/fps <= ann[2]:
+                        label[ann[0], (fr-1)%snippets] = 1
+
+            dataset.append((vid, j+1, label))
+            count_items += 1
+
+    print("Make dataset {}: {} examples".format(split, count_items*snippets))
     
     return dataset
 
 
 class Charades(data_utl.Dataset):
 
-    def __init__(self, split_file, split, root, mode, transforms=None):
+    def __init__(self, split_file, split, root, mode, snippets, transforms=None):
         
-        self.data = make_dataset(split_file, split, root, mode)
+        self.data = make_dataset(split_file, split, root, mode, snippets)
         self.split_file = split_file
         self.transforms = transforms
         self.mode = mode
         self.root = root
+        self.snippets = snippets
 
     def __getitem__(self, index):
         """
@@ -108,14 +113,14 @@ class Charades(data_utl.Dataset):
         Returns:
             tuple: (image, target) where target is class_index of the target class.
         """
-        vid, label, dur, nf = self.data[index]
-        start_f = random.randint(1,nf-65)
+        vid, start, label = self.data[index]
+        #start_f = random.randint(1,nf-65)
 
         if self.mode == 'rgb':
-            imgs = load_rgb_frames(self.root, vid, start_f, 64)
+            imgs = load_rgb_frames(self.root, vid, start, self.snippets)
         else:
-            imgs = load_flow_frames(self.root, vid, start_f, 64)
-        label = label[:, start_f:start_f+64]
+            imgs = load_flow_frames(self.root, vid, start, self.snippets)
+        #label = label[:, :] #start_f:start_f+64]
 
         imgs = self.transforms(imgs)
 
