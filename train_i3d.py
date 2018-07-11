@@ -78,6 +78,7 @@ import subprocess
 def run(init_lr=0.1,
         max_steps=1e8,
         mode='rgb',
+        dataset='thumos',
         root_train='/mnt/data_a/alex/PyTorch_I3D/thumos/validation/',
         root_eval='/mnt/data_a/alex/PyTorch_I3D/thumos/test/',
         train_split='/mnt/data_a/alex/PyTorch_I3D/thumos/validation/validation_thumos.json',
@@ -102,10 +103,10 @@ def run(init_lr=0.1,
     test_transforms = transforms.Compose([videotransforms.CenterCrop(224)])
 
     dataset = Dataset(train_split, 'training', root_train, mode, snippets, train_transforms)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=6, pin_memory=True, drop_last=True)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True, drop_last=True)
 
     val_dataset = Dataset(eval_split, 'testing', root_eval, mode, snippets, test_transforms)
-    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size_eval, shuffle=True, num_workers=6, pin_memory=True, drop_last=True)    
+    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size_eval, shuffle=True, num_workers=8, pin_memory=True, drop_last=True)    
 
     dataloaders = {'train': dataloader, 'val': val_dataloader}
     datasets = {'train': dataset, 'val': val_dataset}
@@ -113,6 +114,7 @@ def run(init_lr=0.1,
     
     ## setup the model
     steps = 0
+    epoch = 0
     if not os.path.exists(args.save_model):
         subprocess.call('mkdir ' + args.save_model, shell=True)
 
@@ -127,6 +129,10 @@ def run(init_lr=0.1,
         checkpoint = last_checkpoint(args.save_model)
         i3d.load_state_dict(torch.load(args.save_model + checkpoint))
         steps = int(checkpoint[:-3])
+        if dataset=='thumos':
+            epoch = int(steps*snippets*batch_size*num_steps_per_update / 1214016)
+        else:
+            epoch = int(steps*snippets*batch_size*num_steps_per_update / 5482688)
 
     # or load the pre-trained I3D
     else:
@@ -154,9 +160,10 @@ def run(init_lr=0.1,
     lr = init_lr
     optimizer = optim.SGD(i3d.parameters(), lr=lr, momentum=0.9, weight_decay=0.0000001)
     lr_sched = optim.lr_scheduler.MultiStepLR(optimizer=optimizer, milestones=[1000], gamma=0.1)
+    if steps>0:
+        for i in range(steps):
+            lr_sched.step()
 
-
-    epoch = 0
     # train it
     while steps < max_steps:
         epoch += 1
@@ -324,6 +331,7 @@ if __name__ == '__main__':
     run(init_lr=args.init_lr,
         max_steps=args.max_steps,
         mode=args.mode,
+        dataset=args.dataset,
         root_train=args.root_train,
         root_eval=args.root_eval,
         train_split=args.train_split,
