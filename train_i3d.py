@@ -219,10 +219,15 @@ def run(init_lr=0.1,
                 else:    
                     per_frame_logits = i3d(inputs)
 
+                ### UPSAMPLING PART
                 # upsample to input size
                 per_frame_logits = F.upsample(per_frame_logits, t, mode='linear')
                 if crf:
                     per_frame_logits_ante_crf = F.upsample(per_frame_logits_ante_crf, t, mode='linear')
+
+                ### DOWNSAMPLING PART
+                # stride = t//per_frame_logits.size(2)
+                # labels = labels[:,:,range(stride//2, t, stride)]
                 
                 # accumulate predictions and ground truths
                 pred_np = pt_var_to_numpy(nn.Sigmoid()(per_frame_logits))
