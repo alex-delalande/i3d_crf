@@ -199,7 +199,7 @@ class CRF_pairwise_cond(nn.Module):
                  num_classes=65,
                  name='crf'):
         super(CRF_pairwise_cond, self).__init__()
-        # 1 input vector of predictions, 1 output vector of predictions
+        # 1 input vector of predictions, 2 input matrices of pairwise potentials, 1 output vector of predictions
         self.num_updates = num_updates
         self.num_classes = num_classes
         self.name = name
@@ -458,12 +458,14 @@ class InceptionI3d(nn.Module):
         if not self.use_crf: # no CRF
             return logits
 
-        else:
-            if not self.pairwise_cond_crf: # simple unary CRF
+        else: # CRF
+            # semi-CRF
+            if not self.pairwise_cond_crf: 
                 crf = self.crf(logits)
                 return logits, crf
 
-            else: # both unary & pairwise CRF
+            # fully-CRF
+            else:
                 psi_0 = self.psi_0(self.dropout(self.avg_pool(x)))
                 psi_1 = self.psi_1(self.dropout(self.avg_pool(x)))
                 if self._spatial_squeeze:

@@ -19,7 +19,7 @@ def last_checkpoint(path):
         if elt[-3:] == ".pt":
             list_chkpt.append(int(elt[:-3]))
 
-    return str(max(list_chkpt)).zfill(6)+".pt"# list_elts[list_elts.index(str(max(list_chkpt))+".pt")]
+    return str(max(list_chkpt)).zfill(6)+".pt"
 
 
 def get_reg_loss(model, targeted_name, reg_type):

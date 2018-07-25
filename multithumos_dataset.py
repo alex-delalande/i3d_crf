@@ -131,3 +131,39 @@ class Multithumos(data_utl.Dataset):
 
     def __len__(self):
         return len(self.data)
+
+
+
+
+class Multithumos_eval(data_utl.Dataset):
+
+    def __init__(self, split_file, split, root, mode, snippets, transforms=None):
+        
+        self.data = make_dataset(split_file, split, root, mode, snippets)
+        self.split_file = split_file
+        self.transforms = transforms
+        self.mode = mode
+        self.root = root
+        self.snippets = snippets
+
+    def __getitem__(self, index):
+        """
+        Args:
+            index (int): Index
+
+        Returns:
+            tuple: (image, target) where target is class_index of the target class.
+        """
+        vid, start, label = self.data[index]
+
+        if self.mode == 'rgb':
+            imgs = load_rgb_frames(self.root, vid, start, self.snippets)
+        else:
+            imgs = load_flow_frames(self.root, vid, start, self.snippets)
+
+        imgs = self.transforms(imgs)
+
+        return vid, start, video_to_tensor(imgs), torch.from_numpy(label)
+
+    def __len__(self):
+        return len(self.data)

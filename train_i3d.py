@@ -41,10 +41,6 @@ parser.add_argument('-reg_type', type=str, default='l2')
 
 args = parser.parse_args()
 
-#os.environ["CUDA_VISIBLE_DEVICES"]=args.gpus
-
-
-
 
 import torch
 import torch.nn as nn
@@ -96,6 +92,7 @@ def run(init_lr=0.1,
         use_cls=False,
         pairwise_cond_crf=False,
         reg_type='l2'):
+
     # setup dataset
     train_transforms = transforms.Compose([videotransforms.RandomCrop(224),
                                            videotransforms.RandomHorizontalFlip(),
@@ -112,30 +109,19 @@ def run(init_lr=0.1,
     datasets = {'train': dataset, 'val': val_dataset}
 
     
-    ## setup the model
+    # setup model
     steps = 0
     epoch = 0
     if not os.path.exists(args.save_model):
         subprocess.call('mkdir ' + args.save_model, shell=True)
+    configure(args.save_model + "tensorboard_logger", flush_secs=5)
 
-    # resume the training
-    if not os.listdir(args.save_model) == []:
-        if mode == 'flow':
-            i3d = InceptionI3d(num_classes, in_channels=2, use_crf=crf, num_updates_crf=num_updates_crf, pairwise_cond_crf=pairwise_cond_crf)
-
-        else:
-            i3d = InceptionI3d(num_classes, in_channels=3, use_crf=crf, num_updates_crf=num_updates_crf, pairwise_cond_crf=pairwise_cond_crf)
-
+    # resume the training or load the pre-trained I3D
+    checkpoint=-1
+    try:
         checkpoint = last_checkpoint(args.save_model)
-        i3d.load_state_dict(torch.load(args.save_model + checkpoint))
-        steps = int(checkpoint[:-3])
-        if dataset=='thumos':
-            epoch = int(steps*snippets*batch_size*num_steps_per_update / 1214016)
-        else:
-            epoch = int(steps*snippets*batch_size*num_steps_per_update / 5482688)
-
-    # or load the pre-trained I3D
-    else:
+    except:
+        print("Loading the pre-trained I3D")
         subprocess.call('mkdir ' + args.save_model + "/tensorboard_logger", shell=True)
         if mode == 'flow':
             i3d = InceptionI3d(400, in_channels=2, use_crf=crf, num_updates_crf=num_updates_crf, pairwise_cond_crf=pairwise_cond_crf)
@@ -152,11 +138,28 @@ def run(init_lr=0.1,
             i3d.load_state_dict(total_dict)
 
         i3d.replace_logits(num_classes)
+
+    if (checkpoint!=-1):
+        if mode == 'flow':
+            i3d = InceptionI3d(num_classes, in_channels=2, use_crf=crf, num_updates_crf=num_updates_crf, pairwise_cond_crf=pairwise_cond_crf)
+
+        else:
+            i3d = InceptionI3d(num_classes, in_channels=3, use_crf=crf, num_updates_crf=num_updates_crf, pairwise_cond_crf=pairwise_cond_crf)
+
         
+        i3d.load_state_dict(torch.load(args.save_model + checkpoint))
+        steps = int(checkpoint[:-3])
+        if dataset=='thumos':
+            epoch = int(steps*snippets*batch_size*num_steps_per_update / 1214016)
+        else:
+            epoch = int(steps*snippets*batch_size*num_steps_per_update / 5482688)
+
+        
+    # push the pipeline on multiple gpus if possible
     i3d.cuda()
     i3d = nn.DataParallel(i3d)
-    configure(args.save_model + "tensorboard_logger", flush_secs=5)
-
+    
+    # setup optimizer
     lr = init_lr
     optimizer = optim.SGD(i3d.parameters(), lr=lr, momentum=0.9, weight_decay=0.0000001)
     lr_sched = optim.lr_scheduler.MultiStepLR(optimizer=optimizer, milestones=[1000], gamma=0.1)
@@ -164,7 +167,7 @@ def run(init_lr=0.1,
         for i in range(steps):
             lr_sched.step()
 
-    # train it
+    # train the model
     while steps < max_steps:
         epoch += 1
         print('-' * 10)
@@ -172,14 +175,13 @@ def run(init_lr=0.1,
         print('Step {}/{}'.format(steps, max_steps))
         print('-' * 10)
 
-        # Each epoch has a training and validation phase
+        # each epoch has a training and validation phase
         for phase in ['train', 'val']:
             if phase == 'train':
                 print('Entering training loop...')
-                i3d.train() #True)
+                i3d.train()
             else:
                 print('Entering validation loop...')
-                #i3d.train(False)  # Set model to evaluate mode
                 i3d.eval()
                 time_init_eval = time.time()
 
@@ -219,15 +221,10 @@ def run(init_lr=0.1,
                 else:    
                     per_frame_logits = i3d(inputs)
 
-                ### UPSAMPLING PART
                 # upsample to input size
                 per_frame_logits = F.upsample(per_frame_logits, t, mode='linear')
                 if crf:
                     per_frame_logits_ante_crf = F.upsample(per_frame_logits_ante_crf, t, mode='linear')
-
-                ### DOWNSAMPLING PART
-                # stride = t//per_frame_logits.size(2)
-                # labels = labels[:,:,range(stride//2, t, stride)]
                 
                 # accumulate predictions and ground truths
                 pred_np = pt_var_to_numpy(nn.Sigmoid()(per_frame_logits))
@@ -255,14 +252,13 @@ def run(init_lr=0.1,
                 if crf and (reg_crf>0 and not pairwise_cond_crf) :
                     reg_loss = get_reg_loss(i3d, 'crf', reg_type)
                     tot_reg_loss_updt += reg_loss.data[0]
-
                 elif crf and (reg_crf>0 and pairwise_cond_crf) :
                     reg_loss = get_reg_loss(i3d, 'psi_0', reg_type) + get_reg_loss(i3d, 'psi_1', reg_type)
-                    tot_reg_loss_updt += reg_loss.data[0]
-                
+                    tot_reg_loss_updt += reg_crf*reg_loss.data[0]
                 else:
                     reg_loss=0
 
+                # put all the losses together
                 if use_cls:
                     loss = (0.5*loc_loss + 0.5*cls_loss + reg_crf*reg_loss)/num_steps_per_update
                 else:

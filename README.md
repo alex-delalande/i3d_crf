@@ -1,22 +1,63 @@
-# I3D models trained on Kinetics and CRF for multi-label classification
+# CRF for multi-label video classification
 
 ## Overview
 
-This repository contains I3D trained models reported in the paper "[Quo Vadis,
+This repository contains the PyTorch implementation of the CRF structure for multi-label video classification. It uses I3D pre-trained models as base classifiers (I3D is reported in the paper "[Quo Vadis,
 Action Recognition? A New Model and the Kinetics
 Dataset](https://arxiv.org/abs/1705.07750)" by Joao Carreira and Andrew
-Zisserman. 
+Zisserman).
 
-This code is based on Deepmind's [Kinetics-I3D](https://github.com/deepmind/kinetics-i3d). Including PyTorch versions of their models.
+This code is based on Deepmind's [Kinetics-I3D](https://github.com/deepmind/kinetics-i3d) and on AJ Piergiovanni's [PyTorch implementation](https://github.com/piergiaj/pytorch-i3d) of the I3D pipeline.
 
 
-# Fine-tuning and Feature Extraction
-We provide code to extract I3D features and fine-tune I3D for charades. Our fine-tuned models on charades are also available in the models director (in addition to Deepmind's trained models). The deepmind pre-trained models were converted to PyTorch and give identical results (flow_imagenet.pt and rgb_imagenet.pt). These models were pretrained on imagenet and kinetics (see [Kinetics-I3D](https://github.com/deepmind/kinetics-i3d) for details). 
 
-## Fine-tuning I3D
-[train_i3d.py](train_i3d.py) contains the code to fine-tune I3D based on the details in the paper and obtained from the authors. Specifically, this version follows the settings to fine-tune on the [Charades](allenai.org/plato/charades/) dataset based on the author's implementation that won the Charades 2017 challenge. Our fine-tuned RGB and Flow I3D models are available in the model directory (rgb_charades.pt and flow_charades.pt).
+## Requirement
 
-This relied on having the optical flow and RGB frames extracted and saved as images on dist. [charades_dataset.py](charades_dataset.py) contains our code to load video segments for training.
+This code requieres [PyTorch](https://pytorch.org/) and [tensorboard_logger](https://github.com/TeamHG-Memex/tensorboard_logger).
 
-## Feature Extraction
-[extract_features.py](extract_features.py) contains the code to load a pre-trained I3D model and extract the features and save the features as numpy arrays. The [charades_dataset_full.py](charades_dataset_full.py) script loads an entire video to extract per-segment features.
+## Training I3D + semi/fully-CRF end-to-end
+
+This pipeline uses Deepmind's pretrained I3D models (pretrained on ImageNet and Kinetics, see [Kinetics-I3D](https://github.com/deepmind/kinetics-i3d) for details). These are the models denoted as rgb_imagenet.pt and flow_imagenet.pt found in the directory **models/**.
+
+
+### Base model (I3D)
+
+The base model can be trained using the following command:
+
+```
+python train_i3d.py -dataset 'charades' -mode 'flow' -save_model 'path_to_saving_directory' -root_train 'path_to_flow_training_data' -train_split 'path_to_train_charades.json' -root_eval 'path_to_flow_evaluation_data' -eval_split 'path_to_test_charades.json' -snippets 64 -batch_size 4 -batch_size_eval 4 -saving_steps 5000 -num_steps_per_update 1 -num_classes 157 -init_lr 0.1 -use_cls True
+```
+
+Dataset is either 'charades' or 'multithumos', mode is either 'flow' or 'rgb'.
+
+
+### Semi-CRF model (I3D)
+
+To add the semi-CRF structure, add '-crf True' and the regularization value wanted as follows:
+```
+python train_i3d.py -dataset 'charades' -mode 'rgb' -save_model 'path_to_saving_directory' -root_train 'path_to_rgb_training_data' -train_split 'path_to_train_charades.json' -root_eval 'path_to_rgb_evaluation_data' -eval_split 'path_to_test_charades.json' -snippets 64 -batch_size 4 -batch_size_eval 4 -saving_steps 5000 -num_steps_per_update 1 -num_classes 157 -init_lr 0.1 -use_cls True -crf True -reg_crf 1e-4
+```
+
+### Fully-CRF model (I3D)
+
+To add the fully-CRF structure, add '-conditional_crf True' and the regularization value wanted as follows:
+```
+python train_i3d.py -mode 'rgb' -save_model 'path_to_saving_directory' -root_train 'path_to_rgb_training_data' -train_split 'path_to_train_thumos.json' -root_eval 'path_to_rgb_evaluation_data' -eval_split 'path_to_test_thumos.json' -snippets 64 -batch_size 4 -batch_size_eval 4 -saving_steps 5000 -num_steps_per_update 1 -num_classes 65 -init_lr 0.1 -crf True -use_cls True -conditional_crf True -reg_crf 1e-3
+```
+
+
+## Testing
+
+### One-stream (RGB of Optical-flow)
+
+```
+python eval_i3d.py -dataset 'charades' -mode 'rgb' -save_model 'path_to_saving_directory' -root_eval 'path_to_rgb_evaluation_data' -eval_split  'path_to_test_charades.json' -snippets 64 -batch_size_eval 1 -num_classes 157 -crf True -eval_checkpoint 750000
+```
+
+
+### Two-stream (RGB of Optical-flow)
+
+```
+python eval_i3d_2_streams_csv_charades.py -dataset 'charades' -save_model_rgb 'path_to_rgb_saving_directory' -save_model_flow 'path_to_flow_saving_directory' -root_eval_rgb 'path_to_rgb_test_data' -root_eval_flow 'path_to_flow_test_data' -eval_split 'path_to_test_charades.json' -snippets 64 -batch_size_eval 1 -crf True -num_classes 157 -eval_checkpoint_rgb 1000000 -eval_checkpoint_flow 1000000
+```
+
