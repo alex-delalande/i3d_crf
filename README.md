@@ -31,14 +31,14 @@ python train_i3d.py -dataset 'charades' -mode 'flow' -save_model 'path_to_saving
 Dataset is either 'charades' or 'multithumos', mode is either 'flow' or 'rgb'.
 
 
-### Semi-CRF model (I3D)
+### Semi-CRF model
 
 To add the semi-CRF structure, add '-crf True' and the regularization value wanted as follows:
 ```
 python train_i3d.py -dataset 'charades' -mode 'rgb' -save_model 'path_to_saving_directory' -root_train 'path_to_rgb_training_data' -train_split 'path_to_train_charades.json' -root_eval 'path_to_rgb_evaluation_data' -eval_split 'path_to_test_charades.json' -snippets 64 -batch_size 4 -batch_size_eval 4 -saving_steps 5000 -num_steps_per_update 1 -num_classes 157 -init_lr 0.1 -use_cls True -crf True -reg_crf 1e-4
 ```
 
-### Fully-CRF model (I3D)
+### Fully-CRF model
 
 To add the fully-CRF structure, add '-conditional_crf True' and the regularization value wanted as follows:
 ```
@@ -55,7 +55,7 @@ python eval_i3d.py -dataset 'charades' -mode 'rgb' -save_model 'path_to_saving_d
 ```
 
 
-### Two-stream (RGB of Optical-flow)
+### Two-stream
 
 ```
 python eval_i3d_2_streams.py -dataset 'charades' -save_model_rgb 'path_to_rgb_saving_directory' -save_model_flow 'path_to_flow_saving_directory' -root_eval_rgb 'path_to_rgb_test_data' -root_eval_flow 'path_to_flow_test_data' -eval_split 'path_to_test_charades.json' -snippets 64 -batch_size_eval 1 -crf True -num_classes 157 -eval_checkpoint_rgb 500000 -eval_checkpoint_flow 500000
@@ -70,6 +70,6 @@ tensorboard --logdir=path_to_saving_directory/tensorboard_logger
 
 For 2-Streams events (after use of eval_i3d_2_streams.py):
 ```
-tensorboard --logdir=path_to_saving_directory/tensorboard_logger_2_streams
+tensorboard --logdir=path_to_rgb_saving_directory/tensorboard_logger_2_streams
 ```
 
