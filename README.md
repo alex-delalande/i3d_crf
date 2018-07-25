@@ -58,6 +58,6 @@ python eval_i3d.py -dataset 'charades' -mode 'rgb' -save_model 'path_to_saving_d
 ### Two-stream (RGB of Optical-flow)
 
 ```
-python eval_i3d_2_streams_csv_charades.py -dataset 'charades' -save_model_rgb 'path_to_rgb_saving_directory' -save_model_flow 'path_to_flow_saving_directory' -root_eval_rgb 'path_to_rgb_test_data' -root_eval_flow 'path_to_flow_test_data' -eval_split 'path_to_test_charades.json' -snippets 64 -batch_size_eval 1 -crf True -num_classes 157 -eval_checkpoint_rgb 1000000 -eval_checkpoint_flow 1000000
+python eval_i3d_2_streams.py -dataset 'charades' -save_model_rgb 'path_to_rgb_saving_directory' -save_model_flow 'path_to_flow_saving_directory' -root_eval_rgb 'path_to_rgb_test_data' -root_eval_flow 'path_to_flow_test_data' -eval_split 'path_to_test_charades.json' -snippets 64 -batch_size_eval 1 -crf True -num_classes 157 -eval_checkpoint_rgb 500000 -eval_checkpoint_flow 500000
 ```
 
