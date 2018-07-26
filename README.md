@@ -13,7 +13,7 @@ This code is based on Deepmind's [Kinetics-I3D](https://github.com/deepmind/kine
 
 ## Requirement
 
-This code requieres [PyTorch](https://pytorch.org/) and [tensorboard_logger](https://github.com/TeamHG-Memex/tensorboard_logger).
+This code was developped with Python 3.6 and [PyTorch](https://pytorch.org/) 0.4.0. It requieres [tensorboard_logger](https://github.com/TeamHG-Memex/tensorboard_logger) and [h5py](https://pypi.org/project/h5py/).
 
 ## Training I3D + semi/fully-CRF end-to-end
 

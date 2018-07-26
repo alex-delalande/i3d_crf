@@ -122,7 +122,7 @@ def run(init_lr=0.1,
         checkpoint = last_checkpoint(args.save_model)
     except:
         print("Loading the pre-trained I3D")
-        subprocess.call('mkdir ' + args.save_model + "/tensorboard_logger", shell=True)
+        subprocess.call('mkdir ' + args.save_model + "tensorboard_logger", shell=True)
         if mode == 'flow':
             i3d = InceptionI3d(400, in_channels=2, use_crf=crf, num_updates_crf=num_updates_crf, pairwise_cond_crf=pairwise_cond_crf)
             total_dict = i3d.state_dict()
