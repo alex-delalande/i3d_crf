@@ -88,16 +88,16 @@ def run(mode='rgb',
     
     eval_checkpoint = args.eval_checkpoint
     if eval_checkpoint<0:
-        checkpoint = last_checkpoint(args.save_model)
+        checkpoint = last_checkpoint(save_model)
     else:
         checkpoint = str(eval_checkpoint).zfill(6)+'.pt'
 
-    i3d.load_state_dict(torch.load(args.save_model + checkpoint))
+    i3d.load_state_dict(torch.load(save_model + checkpoint))
     steps = int(checkpoint[:-3])
     
     i3d.cuda()
     i3d = nn.DataParallel(i3d)
-    configure(args.save_model + "tensorboard_logger", flush_secs=5)
+    configure(save_model + "tensorboard_logger", flush_secs=5)
 
 
 
@@ -106,15 +106,15 @@ def run(mode='rgb',
     print('-' * 10)
 
     # preparing csv files for containing the predictions and ground truths
-    path_csv_pred = args.save_model+'/pred_eval_step_' + str(steps) + '.csv'
+    path_csv_pred = save_model+'pred_eval_step_' + str(steps) + '.csv'
     if os.path.exists(path_csv_pred):
         subprocess.call('rm -r ' + path_csv_pred, shell=True)
 
-    path_csv_labels = args.save_model+'/labels_eval_step_' + str(steps) + '.csv'
+    path_csv_labels = save_model+'labels_eval_step_' + str(steps) + '.csv'
     if os.path.exists(path_csv_labels):
         subprocess.call('rm -r ' + path_csv_labels, shell=True)
 
-    path_csv_vid = args.save_model+'/vid_eval_step_' + str(steps) + '.csv'
+    path_csv_vid = save_model+'vid_eval_step_' + str(steps) + '.csv'
     if os.path.exists(path_csv_vid):
         subprocess.call('rm -r ' + path_csv_vid, shell=True)
 
