@@ -21,7 +21,7 @@ cd /raid/alex/PyTorch_I3D/code_fully_connected/
 ```
 
 
-Then launch  train_i3d.py.**Be sure to be in “code_fully_connected/” folder**.
+Then launch  train_i3d.py. **Be sure to be in th “code_fully_connected/” folder**.
 
 For instance on Charades RGB the code is:
 ```

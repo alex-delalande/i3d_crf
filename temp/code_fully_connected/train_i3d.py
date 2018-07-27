@@ -295,10 +295,6 @@ def run(init_lr=0.1,
                     print("EPOCH: {} Step: {} - Saving model...".format(epoch, steps))
                     torch.save(i3d.module.state_dict(), save_model+str(steps).zfill(6)+'.pt')
                     tot_loss = tot_loc_loss = tot_cls_loss = 0.
-                    if crf:
-                        psi_0, psi_1 = get_param_crf(i3d)
-                        np.save(save_model + 'psi_0_' + str(steps), pt_var_to_numpy(psi_0))
-                        np.save(save_model + 'psi_1_' + str(steps), pt_var_to_numpy(psi_1))
                 
                 if phase == 'val':
                     time_end_batch = time.time()
